@@ -147,7 +147,18 @@ export function SiteLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="border-t border-border py-4 text-center text-xs text-muted-foreground">
-          © {new Date().getFullYear()} Terrier-Rouge Commune — Contenu de démonstration inclus.
+          © {new Date().getFullYear()} Terrier-Rouge Commune — Contenu de démonstration inclus. ·{" "}
+          {session ? (
+            isAdmin ? (
+              <Link to="/admin" className="underline hover:text-foreground">
+                Administration
+              </Link>
+            ) : null
+          ) : (
+            <Link to="/auth" className="underline hover:text-foreground">
+              Espace administration
+            </Link>
+          )}
         </div>
       </footer>
     </div>
