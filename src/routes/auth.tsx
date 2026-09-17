@@ -77,7 +77,10 @@ function AuthPage() {
       return;
     }
     if (!email.success || !password.success) {
-      toast.error(email.success ? password.error.issues[0]!.message : email.error.issues[0]!.message);
+      toast.error(
+        (email.success ? password.error?.issues[0]?.message : email.error?.issues[0]?.message) ??
+          "Informations invalides",
+      );
       return;
     }
     setLoading(true);
