@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Pencil, Plus, Trash2, Eye, EyeOff } from "lucide-react";
+import { Pencil, Plus, Trash2, Eye, EyeOff, Upload, ImageIcon, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -91,12 +91,31 @@ const EMPTY_FORM: FormState = {
   is_demo: false,
 };
 
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_VIDEO_BYTES = 100 * 1024 * 1024;
+
+async function uploadToBucket(bucket: "project-images" | "project-videos", file: File) {
+  const ext = file.name.includes(".") ? file.name.split(".").pop() : "bin";
+  const path = `${crypto.randomUUID()}.${ext}`;
+  const options = file.type ? { contentType: file.type, upsert: false } : { upsert: false };
+  const { error } = await supabase.storage.from(bucket).upload(path, file, options);
+  if (error) throw error;
+  const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  return data.publicUrl;
+}
+
 function AdminProjects() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [slugTouched, setSlugTouched] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const [uploadingFeatured, setUploadingFeatured] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+  const featuredInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const categories = useQuery({
     queryKey: ["admin-categories-lite"],
@@ -118,6 +137,90 @@ function AdminProjects() {
       return data ?? [];
     },
   });
+
+  const galleryImages = useQuery({
+    queryKey: ["admin-project-images", form.id],
+    enabled: Boolean(form.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_images")
+        .select("*")
+        .eq("project_id", form.id!)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const handleFeaturedFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error("Image trop lourde (8 Mo max).");
+      return;
+    }
+    setUploadingFeatured(true);
+    try {
+      const url = await uploadToBucket("project-images", file);
+      setForm((f) => ({ ...f, featured_image: url }));
+      toast.success("Image principale téléversée");
+    } catch {
+      toast.error("Téléversement impossible.");
+    } finally {
+      setUploadingFeatured(false);
+      if (featuredInputRef.current) featuredInputRef.current.value = "";
+    }
+  };
+
+  const handleVideoFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > MAX_VIDEO_BYTES) {
+      toast.error("Vidéo trop lourde (100 Mo max).");
+      return;
+    }
+    setUploadingVideo(true);
+    try {
+      const url = await uploadToBucket("project-videos", file);
+      setForm((f) => ({ ...f, video_url: url }));
+      toast.success("Vidéo téléversée");
+    } catch {
+      toast.error("Téléversement impossible.");
+    } finally {
+      setUploadingVideo(false);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
+  };
+
+  const handleGalleryFile = async (file: File | undefined) => {
+    if (!file || !form.id) return;
+    if (file.size > MAX_IMAGE_BYTES) {
+      toast.error("Image trop lourde (8 Mo max).");
+      return;
+    }
+    setUploadingGallery(true);
+    try {
+      const url = await uploadToBucket("project-images", file);
+      const { error } = await supabase
+        .from("project_images")
+        .insert({ project_id: form.id, image_url: url });
+      if (error) throw error;
+      void queryClient.invalidateQueries({ queryKey: ["admin-project-images", form.id] });
+      toast.success("Image ajoutée à la galerie");
+    } catch {
+      toast.error("Téléversement impossible.");
+    } finally {
+      setUploadingGallery(false);
+      if (galleryInputRef.current) galleryInputRef.current.value = "";
+    }
+  };
+
+  const removeGalleryImage = async (id: string) => {
+    const { error } = await supabase.from("project_images").delete().eq("id", id);
+    if (error) {
+      toast.error("Suppression impossible.");
+      return;
+    }
+    void queryClient.invalidateQueries({ queryKey: ["admin-project-images", form.id] });
+  };
 
   const openCreate = () => {
     setForm(EMPTY_FORM);
@@ -193,17 +296,33 @@ function AdminProjects() {
       is_demo: form.is_demo,
     };
 
-    const { error } = form.id
-      ? await supabase.from("projects").update(payload).eq("id", form.id)
-      : await supabase.from("projects").insert({ ...payload, created_by: userData.user?.id ?? null });
-
-    setSaving(false);
-    if (error) {
-      toast.error(error.message.includes("duplicate") ? "Ce slug est déjà utilisé." : "Enregistrement impossible.");
-      return;
+    if (form.id) {
+      const { error } = await supabase.from("projects").update(payload).eq("id", form.id);
+      setSaving(false);
+      if (error) {
+        toast.error(
+          error.message.includes("duplicate") ? "Ce slug est déjà utilisé." : "Enregistrement impossible.",
+        );
+        return;
+      }
+      toast.success("Projet mis à jour");
+      setOpen(false);
+    } else {
+      const { data, error } = await supabase
+        .from("projects")
+        .insert({ ...payload, created_by: userData.user?.id ?? null })
+        .select("id")
+        .single();
+      setSaving(false);
+      if (error || !data) {
+        toast.error(
+          error?.message.includes("duplicate") ? "Ce slug est déjà utilisé." : "Enregistrement impossible.",
+        );
+        return;
+      }
+      toast.success("Projet créé — vous pouvez maintenant ajouter des images.");
+      setForm((f) => ({ ...f, id: data.id }));
     }
-    toast.success(form.id ? "Projet mis à jour" : "Projet créé");
-    setOpen(false);
     void queryClient.invalidateQueries({ queryKey: ["admin-projects"] });
   };
 
@@ -479,22 +598,79 @@ function AdminProjects() {
               />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="p-image">Image principale (URL)</Label>
-              <Input
-                id="p-image"
-                value={form.featured_image}
-                onChange={(e) => setForm((f) => ({ ...f, featured_image: e.target.value }))}
-                placeholder="https://…"
-              />
+              <Label htmlFor="p-image">Image principale</Label>
+              <div className="flex items-center gap-3">
+                {form.featured_image ? (
+                  <img
+                    src={form.featured_image}
+                    alt=""
+                    className="size-14 shrink-0 rounded-md border border-border object-cover"
+                  />
+                ) : (
+                  <div className="grid size-14 shrink-0 place-items-center rounded-md border border-dashed border-border text-muted-foreground">
+                    <ImageIcon className="size-5" />
+                  </div>
+                )}
+                <Input
+                  id="p-image"
+                  value={form.featured_image}
+                  onChange={(e) => setForm((f) => ({ ...f, featured_image: e.target.value }))}
+                  placeholder="https://… ou téléversez un fichier"
+                />
+                <input
+                  ref={featuredInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => void handleFeaturedFile(e.target.files?.[0])}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={uploadingFeatured}
+                  onClick={() => featuredInputRef.current?.click()}
+                  aria-label="Téléverser une image"
+                >
+                  {uploadingFeatured ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Upload className="size-4" />
+                  )}
+                </Button>
+              </div>
             </div>
             <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="p-video">Vidéo (URL)</Label>
-              <Input
-                id="p-video"
-                value={form.video_url}
-                onChange={(e) => setForm((f) => ({ ...f, video_url: e.target.value }))}
-                placeholder="https://…"
-              />
+              <Label htmlFor="p-video">Vidéo</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="p-video"
+                  value={form.video_url}
+                  onChange={(e) => setForm((f) => ({ ...f, video_url: e.target.value }))}
+                  placeholder="https://… ou téléversez un fichier"
+                />
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(e) => void handleVideoFile(e.target.files?.[0])}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  disabled={uploadingVideo}
+                  onClick={() => videoInputRef.current?.click()}
+                  aria-label="Téléverser une vidéo"
+                >
+                  {uploadingVideo ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <Upload className="size-4" />
+                  )}
+                </Button>
+              </div>
             </div>
             <label className="flex items-center gap-2.5 text-sm">
               <Checkbox
@@ -511,6 +687,58 @@ function AdminProjects() {
               Marquer comme DEMO
             </label>
           </div>
+
+          {form.id ? (
+            <div className="space-y-3 border-t border-border pt-4">
+              <div className="flex items-center justify-between">
+                <Label>Galerie d'images</Label>
+                <input
+                  ref={galleryInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => void handleGalleryFile(e.target.files?.[0])}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={uploadingGallery}
+                  onClick={() => galleryInputRef.current?.click()}
+                >
+                  {uploadingGallery ? (
+                    <Loader2 className="size-3.5 animate-spin" />
+                  ) : (
+                    <Upload className="size-3.5" />
+                  )}
+                  Ajouter une image
+                </Button>
+              </div>
+              {galleryImages.data && galleryImages.data.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                  {galleryImages.data.map((img) => (
+                    <div key={img.id} className="group relative aspect-square overflow-hidden rounded-md border border-border">
+                      <img src={img.image_url} alt="" className="size-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => removeGalleryImage(img.id)}
+                        aria-label="Supprimer l'image"
+                        className="absolute right-1 top-1 grid size-6 place-items-center rounded-full bg-background/90 text-destructive opacity-0 shadow transition-opacity group-hover:opacity-100"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Aucune image dans la galerie.</p>
+              )}
+            </div>
+          ) : (
+            <p className="border-t border-border pt-4 text-xs text-muted-foreground">
+              Enregistrez d'abord le projet pour pouvoir ajouter des images à sa galerie.
+            </p>
+          )}
 
           <Button className="mt-2 w-full" onClick={save} disabled={saving}>
             {saving ? "Enregistrement…" : form.id ? "Mettre à jour" : "Créer le projet"}
