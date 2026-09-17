@@ -115,7 +115,7 @@ export function SiteLayout({ children }: { children: ReactNode }) {
       <main className="flex-1">{children}</main>
 
       <footer className="mt-16 border-t border-border bg-secondary/40">
-        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:grid-cols-3">
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <p className="text-sm font-bold">TERRIER-ROUGE COMMUNE</p>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -144,6 +144,27 @@ export function SiteLayout({ children }: { children: ReactNode }) {
               Les contributions financières sont vérifiées manuellement par l'administration avant
               d'être comptabilisées.
             </p>
+          </div>
+          <div>
+            <p className="text-sm font-semibold">Légal</p>
+            <ul className="mt-2 space-y-1.5">
+              <li>
+                <Link
+                  to="/politique-de-confidentialite"
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Politique de confidentialité
+                </Link>
+              </li>
+              <li>
+                <Link
+                  to="/conditions-generales"
+                  className="text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Termes et conditions
+                </Link>
+              </li>
+            </ul>
           </div>
         </div>
         <div className="border-t border-border py-4 text-center text-xs text-muted-foreground">
