@@ -50,26 +50,21 @@ export function SiteLayout({ children }: { children: ReactNode }) {
               </Link>
             ))}
             {isAdmin ? (
-              <Button asChild size="sm" variant="secondary" className="ml-2">
-                <Link to="/admin">
-                  <LayoutDashboard /> Admin
-                </Link>
-              </Button>
-            ) : null}
-            {session ? (
               <>
-                <Button asChild size="sm" variant="ghost">
-                  <Link to="/account">Mon compte</Link>
+                <Button asChild size="sm" variant="secondary" className="ml-2">
+                  <Link to="/admin">
+                    <LayoutDashboard /> Admin
+                  </Link>
                 </Button>
                 <Button size="sm" variant="outline" onClick={signOut}>
                   <LogOut /> Quitter
                 </Button>
               </>
-            ) : (
-              <Button asChild size="sm" className="ml-2">
-                <Link to="/auth">Connexion</Link>
+            ) : session ? (
+              <Button size="sm" variant="outline" onClick={signOut}>
+                <LogOut /> Quitter
               </Button>
-            )}
+            ) : null}
           </nav>
 
           <button
@@ -105,30 +100,13 @@ export function SiteLayout({ children }: { children: ReactNode }) {
                 </Link>
               ) : null}
               {session ? (
-                <>
-                  <Link
-                    to="/account"
-                    onClick={() => setOpen(false)}
-                    className="rounded-md px-3 py-2.5 text-sm font-medium"
-                  >
-                    Mon compte
-                  </Link>
-                  <button
-                    onClick={signOut}
-                    className="rounded-md px-3 py-2.5 text-left text-sm font-medium text-destructive"
-                  >
-                    Se déconnecter
-                  </button>
-                </>
-              ) : (
-                <Link
-                  to="/auth"
-                  onClick={() => setOpen(false)}
-                  className="rounded-md px-3 py-2.5 text-sm font-semibold text-primary"
+                <button
+                  onClick={signOut}
+                  className="rounded-md px-3 py-2.5 text-left text-sm font-medium text-destructive"
                 >
-                  Connexion
-                </Link>
-              )}
+                  Se déconnecter
+                </button>
+              ) : null}
             </nav>
           </div>
         ) : null}

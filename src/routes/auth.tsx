@@ -13,14 +13,14 @@ import { useAuth } from "@/hooks/useAuth";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Connexion — Terrier-Rouge Commune" },
+      { title: "Connexion administrateur — Terrier-Rouge Commune" },
       {
         name: "description",
         content:
-          "Connectez-vous ou créez un compte pour suivre vos contributions aux projets de Terrier-Rouge.",
+          "Accès réservé à l'administration de Terrier-Rouge Commune. Les donateurs n'ont pas besoin de créer de compte pour contribuer.",
       },
-      { property: "og:title", content: "Connexion — Terrier-Rouge Commune" },
-      { property: "og:description", content: "Accédez à votre compte donateur." },
+      { property: "og:title", content: "Connexion administrateur — Terrier-Rouge Commune" },
+      { property: "og:description", content: "Accès réservé à l'administration." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
@@ -37,7 +37,7 @@ function AuthPage() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (session) void navigate({ to: "/account" });
+    if (session) void navigate({ to: "/admin" });
   }, [session, navigate]);
 
   const signIn = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -63,41 +63,7 @@ function AuthPage() {
       return;
     }
     toast.success("Connexion réussie");
-    void navigate({ to: "/account" });
-  };
-
-  const signUp = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    const name = String(form.get("full_name") ?? "").trim();
-    const email = emailSchema.safeParse(form.get("email"));
-    const password = passwordSchema.safeParse(form.get("password"));
-    if (name.length < 2) {
-      toast.error("Nom complet requis");
-      return;
-    }
-    if (!email.success || !password.success) {
-      toast.error(
-        (email.success ? password.error?.issues[0]?.message : email.error?.issues[0]?.message) ??
-          "Informations invalides",
-      );
-      return;
-    }
-    setLoading(true);
-    const { error } = await supabase.auth.signUp({
-      email: email.data,
-      password: password.data,
-      options: {
-        emailRedirectTo: `${window.location.origin}/account`,
-        data: { full_name: name },
-      },
-    });
-    setLoading(false);
-    if (error) {
-      toast.error(error.message);
-      return;
-    }
-    toast.success("Compte créé. Vérifiez votre boîte email si une confirmation est demandée.");
+    void navigate({ to: "/admin" });
   };
 
   const reset = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -110,7 +76,7 @@ function AuthPage() {
     }
     setLoading(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email.data, {
-      redirectTo: `${window.location.origin}/account`,
+      redirectTo: `${window.location.origin}/admin`,
     });
     setLoading(false);
     if (error) {
@@ -131,16 +97,16 @@ function AuthPage() {
         </Link>
 
         <div className="rounded-xl border border-border bg-card p-6 shadow-[var(--shadow-soft)]">
-          <h1 className="text-xl font-bold">Votre compte</h1>
+          <h1 className="text-xl font-bold">Espace administration</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Connectez-vous pour suivre vos contributions.
+            Connexion réservée aux administrateurs de la plateforme. Les comptes sont créés
+            directement par l'équipe technique, il n'y a pas d'inscription publique.
           </p>
 
           <Tabs defaultValue="signin" className="mt-5">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="signin">Connexion</TabsTrigger>
-              <TabsTrigger value="signup">Inscription</TabsTrigger>
-              <TabsTrigger value="reset">Oublié</TabsTrigger>
+              <TabsTrigger value="reset">Mot de passe oublié</TabsTrigger>
             </TabsList>
 
             <TabsContent value="signin">
@@ -149,17 +115,6 @@ function AuthPage() {
                 <Field id="si-password" name="password" label="Mot de passe" type="password" />
                 <Button type="submit" className="w-full" disabled={loading}>
                   Se connecter
-                </Button>
-              </form>
-            </TabsContent>
-
-            <TabsContent value="signup">
-              <form onSubmit={signUp} className="space-y-3">
-                <Field id="su-name" name="full_name" label="Nom complet" type="text" />
-                <Field id="su-email" name="email" label="Email" type="email" />
-                <Field id="su-password" name="password" label="Mot de passe" type="password" />
-                <Button type="submit" className="w-full" disabled={loading}>
-                  Créer mon compte
                 </Button>
               </form>
             </TabsContent>
@@ -176,6 +131,9 @@ function AuthPage() {
         </div>
 
         <p className="mt-4 text-center text-xs text-muted-foreground">
+          Vous voulez soutenir un projet ? Aucune connexion n'est nécessaire pour faire un don.
+        </p>
+        <p className="mt-2 text-center text-xs text-muted-foreground">
           <Link to="/" className="underline">
             Retour au site
           </Link>
