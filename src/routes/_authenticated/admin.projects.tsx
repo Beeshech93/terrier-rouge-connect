@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Pencil, Plus, Trash2, Eye, EyeOff, Upload, ImageIcon, Loader2 } from "lucide-react";
+import { Pencil, Plus, Trash2, Eye, EyeOff, Upload, ImageIcon, Loader2, Facebook } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
+import { fetchActiveFacebookSettings, publishProjectToFacebook } from "@/lib/facebook";
 import {
   PROJECT_STATUS_CLASSES,
   PROJECT_STATUS_LABELS,
@@ -113,6 +114,7 @@ function AdminProjects() {
   const [uploadingFeatured, setUploadingFeatured] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
+  const [publishingFbId, setPublishingFbId] = useState<string | null>(null);
   const featuredInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -222,6 +224,33 @@ function AdminProjects() {
     void queryClient.invalidateQueries({ queryKey: ["admin-project-images", form.id] });
   };
 
+  const publishToFacebook = async (project: {
+    id: string;
+    title: string;
+    slug: string;
+    short_description: string | null;
+    budget: number;
+    currency: Currency;
+    location: string | null;
+    featured_image: string | null;
+  }) => {
+    setPublishingFbId(project.id);
+    try {
+      const settings = await fetchActiveFacebookSettings();
+      if (!settings) {
+        toast.error("Configurez d'abord Facebook dans Paramètres.");
+        return;
+      }
+      await publishProjectToFacebook(project, settings);
+      toast.success("Publié sur Facebook");
+      void queryClient.invalidateQueries({ queryKey: ["admin-projects"] });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Échec de la publication Facebook.");
+    } finally {
+      setPublishingFbId(null);
+    }
+  };
+
   const openCreate = () => {
     setForm(EMPTY_FORM);
     setSlugTouched(false);
@@ -256,6 +285,30 @@ function AdminProjects() {
 
   const onTitleChange = (title: string) => {
     setForm((f) => ({ ...f, title, slug: slugTouched ? f.slug : slugify(title) }));
+  };
+
+  const maybeAutoPublish = async (project: {
+    id: string;
+    title: string;
+    slug: string;
+    short_description: string | null;
+    budget: number;
+    currency: Currency;
+    location: string | null;
+    featured_image: string | null;
+    is_public: boolean;
+  }) => {
+    if (!project.is_public) return;
+    try {
+      const settings = await fetchActiveFacebookSettings();
+      if (!settings || !settings.auto_publish) return;
+      await publishProjectToFacebook(project, settings);
+      toast.success("Auto-publié sur Facebook");
+      void queryClient.invalidateQueries({ queryKey: ["admin-projects"] });
+    } catch {
+      // Silent: auto-publish failures shouldn't block the admin's save flow.
+      // The project can still be published manually from the table.
+    }
   };
 
   const save = async () => {
@@ -307,6 +360,7 @@ function AdminProjects() {
       }
       toast.success("Projet mis à jour");
       setOpen(false);
+      void maybeAutoPublish({ ...payload, id: form.id });
     } else {
       const { data, error } = await supabase
         .from("projects")
@@ -322,6 +376,7 @@ function AdminProjects() {
       }
       toast.success("Projet créé — vous pouvez maintenant ajouter des images.");
       setForm((f) => ({ ...f, id: data.id }));
+      void maybeAutoPublish({ ...payload, id: data.id });
     }
     void queryClient.invalidateQueries({ queryKey: ["admin-projects"] });
   };
@@ -334,6 +389,22 @@ function AdminProjects() {
     }
     toast.success(next ? "Projet publié" : "Projet dépublié");
     void queryClient.invalidateQueries({ queryKey: ["admin-projects"] });
+    if (next) {
+      const p = projects.data?.find((row) => row.id === id);
+      if (p) {
+        void maybeAutoPublish({
+          id: p.id,
+          title: p.title,
+          slug: p.slug,
+          short_description: p.short_description,
+          budget: p.budget,
+          currency: p.currency as Currency,
+          location: p.location,
+          featured_image: p.featured_image,
+          is_public: true,
+        });
+      }
+    }
   };
 
   const remove = async (id: string) => {
@@ -400,6 +471,47 @@ function AdminProjects() {
                   <div className="flex items-center gap-1.5">
                     <Button size="icon" variant="ghost" onClick={() => openEdit(p)} aria-label="Modifier">
                       <Pencil className="size-4" />
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      disabled={!p.is_public || publishingFbId === p.id}
+                      onClick={() =>
+                        publishToFacebook({
+                          id: p.id,
+                          title: p.title,
+                          slug: p.slug,
+                          short_description: p.short_description,
+                          budget: p.budget,
+                          currency: p.currency as Currency,
+                          location: p.location,
+                          featured_image: p.featured_image,
+                        })
+                      }
+                      aria-label={
+                        (p as unknown as { facebook_post_id?: string | null }).facebook_post_id
+                          ? "Republier sur Facebook"
+                          : "Publier sur Facebook"
+                      }
+                      title={
+                        !p.is_public
+                          ? "Le projet doit être public"
+                          : (p as unknown as { facebook_post_id?: string | null }).facebook_post_id
+                            ? "Déjà publié — cliquer pour republier"
+                            : "Publier sur Facebook"
+                      }
+                    >
+                      {publishingFbId === p.id ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Facebook
+                          className={
+                            (p as unknown as { facebook_post_id?: string | null }).facebook_post_id
+                              ? "size-4 text-primary"
+                              : "size-4"
+                          }
+                        />
+                      )}
                     </Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>

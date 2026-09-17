@@ -103,6 +103,36 @@ export type Database = {
           },
         ]
       }
+      facebook_settings: {
+        Row: {
+          auto_publish: boolean
+          id: string
+          is_active: boolean
+          page_access_token: string | null
+          page_id: string | null
+          page_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          auto_publish?: boolean
+          id?: string
+          is_active?: boolean
+          page_access_token?: string | null
+          page_id?: string | null
+          page_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auto_publish?: boolean
+          id?: string
+          is_active?: boolean
+          page_access_token?: string | null
+          page_id?: string | null
+          page_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       payment_settings: {
         Row: {
           beneficiary_name: string | null
@@ -317,6 +347,8 @@ export type Database = {
           currency: Database["public"]["Enums"]["currency_code"]
           description: string | null
           expected_end_date: string | null
+          facebook_post_id: string | null
+          facebook_published_at: string | null
           featured_image: string | null
           id: string
           is_demo: boolean
@@ -342,6 +374,8 @@ export type Database = {
           currency?: Database["public"]["Enums"]["currency_code"]
           description?: string | null
           expected_end_date?: string | null
+          facebook_post_id?: string | null
+          facebook_published_at?: string | null
           featured_image?: string | null
           id?: string
           is_demo?: boolean
@@ -367,6 +401,8 @@ export type Database = {
           currency?: Database["public"]["Enums"]["currency_code"]
           description?: string | null
           expected_end_date?: string | null
+          facebook_post_id?: string | null
+          facebook_published_at?: string | null
           featured_image?: string | null
           id?: string
           is_demo?: boolean
